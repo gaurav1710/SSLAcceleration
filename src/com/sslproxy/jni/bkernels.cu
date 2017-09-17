@@ -1,4 +1,4 @@
-#include <cuda.h>
+z#include <cuda.h>
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1306,6 +1306,70 @@ void simulate() {
 	printf("Cleaning up..\n");
 	cleanup();
 #endif
+}
+
+extern void decrypt_batch(JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jobjectArray pd, jobjectArray qd, jobjectArray e, jobjectArray p, jobjectArray q, jobjectArray emsg, jobjectArray dmsg, jobjectArray qinv, jint jnum_req){
+	radix_type *demsg, *dpd, *dqd, *dp, *dq, *dqinv, *dres, *dm1, *dm2;
+	int num_req = (int)jnum_req;
+	int k = (int)jk;	
+	cudaMallocManaged((void **) &demsg, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dpd, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dqd, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dp, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dq, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dqinv, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dres, num_req*2*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dm1, num_req*k*sizeof(radix_type));
+	cudaMallocManaged((void **) &dm2, num_req*k*sizeof(radix_type));
+	
+	convert_arr(env, emsg, demsg, num_req, k);
+	convert_arr(env, pd, dpd, num_req, k);
+	convert_arr(env, qd, dqd, num_req, k);
+	convert_arr(env, p, dp, num_req, k);
+	convert_arr(env, q, dq, num_req, k);
+	convert_arr(env, qinv, dqinv, num_req, k);
+	convert_arr(env, dmsg, dres, num_req, 2*k);
+	for(int i=0;i<num_req;i++){
+		std_print(&dp[i*k],k);
+		std_print(&demsg[i*k],k);
+	}
+	cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, 6);
+
+	memset(dm1,0,num_req*k*sizeof(radix_type));
+	memset(dm2,0,num_req*k*sizeof(radix_type));
+	//internal batch and allocate blocks to requests
+	int num_blocks = num_req/THREADSPERBLOCK;
+	if(num_req%THREADSPERBLOCK!=0)
+		num_blocks++;
+	crt_m<<<num_blocks,THREADSPERBLOCK>>>(demsg,dpd,k,dp,dq,dm1,dm2,num_req);
+
+	calmerge_m1_m2<<<num_blocks,THREADSPERBLOCK>>>(demsg, dpd, dqd, k, dp, dq, dqinv, dm1, dm2, dres,num_req);
+	cudaError_t err = cudaDeviceSynchronize();
+  	if (err != cudaSuccess) fprintf(stderr,"Error Encountered---%s\n", cudaGetErrorString(err));
+	/*for(int l=0;l<num_req;l++){
+		fprintf(stderr,"%d:",l);		
+		for(int j=0;j<2*k;j++){
+			fprintf(stderr,"%d", dres[l*k+j]);
+		}
+		fprintf(stderr,"\n");
+	}*/
+  	for(int i=0;i<num_req;i++){
+		jchar *message = (jchar *)calloc(sizeof(jchar), 2*k);
+		for (int j = 0; j<2*k; j++) {
+				message[j] = (jchar)(dres[i*2*k+j]+'0');
+		}
+		jcharArray  arrMsg = env->NewCharArray(2*k);
+		env->SetCharArrayRegion(arrMsg, 0, 2*k, message);
+		env->SetObjectArrayElement(dmsg,i,arrMsg);
+		//dmsg[i] = arrMsg;
+  	}
+	cudaFree(demsg);
+	cudaFree(dpd);
+	cudaFree(dqd);
+	cudaFree(dp);
+	cudaFree(dq);
+	cudaFree(dqinv);
+	cudaFree(dres);
 }
 
 extern void execute_test() {

@@ -17,13 +17,14 @@ import com.sslproxy.jni.CudaKernels;
 public class BenchmarkSSL {
 	public static int NUMCORES = 8;
 	public static int NUMWORKERS = 1;
-	public static int BITLENGTH = 4;
-	public static int EXPS = 120;
+	public static int BITLENGTH = 16;
+	public static int EXPS = 2;
 	public static int BATCH_SIZE = 1;
 	public static String IMAGEPATH = "./ResFiles/";
 	public static String FILEPATH = "";
 	public static int BASE = 16;// 2^24
-	public static boolean cpuExecution = true;
+	public static boolean cpuExecution = false;
+	public static boolean saveResults = false;
 
 	public static void main(String[] args) {
 		processArgs(args);
@@ -60,7 +61,9 @@ public class BenchmarkSSL {
 			System.out.println("Experiment " + test + " ends with lat=" + avgLatency);
 			DataCollector.addPoint(new DataPoint(2 * BITLENGTH, avgLatency));
 		}
-		DataCollector.saveInFile(FILEPATH + "Res" + new Date().toString() + ".csv");
+		if(saveResults){
+			DataCollector.saveInFile(FILEPATH + "Res" + new Date().toString() + ".csv");
+		}		
 		Plotter.plot(IMAGEPATH + "latencyVsBitLength.jpeg", "BitLength Vs Latency", "Avg. Latency(ms)",
 				"RSA Bit Length");
 	}
