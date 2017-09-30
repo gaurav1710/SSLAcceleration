@@ -8,15 +8,15 @@ NVCC=nvcc
 CUDA_ARCHITECTURE=20
 OCELOT=`OcelotConfig -l`
 COMMAND=$(CC) -w -fPIC  bkernell.o bkernels.o com_sslproxy_jni_CudaKernels.o -o libCudaKernels.so -shared $(LINKER_DIRS) $(LINKER_FLAGS)
-
+JNI_INCLUDE=-I/usr/lib/jvm/java-8-openjdk-amd64/include -I/usr/lib/jvm/java-8-openjdk-amd64/include/linux/
 
 all: createlib
 
 com_sslproxy_jni_CudaKernels.o: com_sslproxy_jni_CudaKernels.c
-	$(CC) -w -fPIC -I/usr/lib/jvm/java-8-openjdk-amd64/include/ -I/usr/lib/jvm/java-8-openjdk-amd64/include/linux/ -c com_sslproxy_jni_CudaKernels.c
+	$(CC) -w -fPIC $(JNI_INCLUDE) -c com_sslproxy_jni_CudaKernels.c
 
 buildkernels:
-	nvcc -w -c -arch=sm_35 -Xcompiler '-fPIC -fopenmp' $(GNUPLOT_INCLUDE) $(MPI_INCLUDE) -rdc=true bkernels.cu
+	nvcc -w -c -arch=sm_35 -Xcompiler '-fPIC -fopenmp'  $(JNI_INCLUDE) -rdc=true bkernels.cu
 	nvcc -w -arch=sm_35 -Xcompiler '-fPIC' -dlink -o bkernell.o bkernels.o
 
 clean:

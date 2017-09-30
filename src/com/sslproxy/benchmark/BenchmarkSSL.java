@@ -17,12 +17,12 @@ import com.sslproxy.jni.CudaKernels;
 public class BenchmarkSSL {
 	public static int NUMCORES = 8;
 	public static int NUMWORKERS = 1;
-	public static int BITLENGTH = 16;
-	public static int EXPS = 2;
+	public static int BITLENGTH = 32;
+	public static int EXPS = 1;
 	public static int BATCH_SIZE = 1;
 	public static String IMAGEPATH = "./ResFiles/";
 	public static String FILEPATH = "";
-	public static int BASE = 16;// 2^24
+	public static int BASE = 16;
 	public static boolean cpuExecution = false;
 	public static boolean saveResults = false;
 
@@ -42,7 +42,7 @@ public class BenchmarkSSL {
 			BITLENGTH++;
 		for (int test = 0; test < EXPS; test++) {
 			// System.out.println("Starting experiment "+test);
-			BITLENGTH++;
+			
 			SSLWorker.initVal();
 			ExecutorService threadpool = Executors.newFixedThreadPool(NUMCORES);
 			long startTime = System.currentTimeMillis();
@@ -60,12 +60,14 @@ public class BenchmarkSSL {
 			}
 			System.out.println("Experiment " + test + " ends with lat=" + avgLatency);
 			DataCollector.addPoint(new DataPoint(2 * BITLENGTH, avgLatency));
+			BITLENGTH++;
 		}
 		if(saveResults){
 			DataCollector.saveInFile(FILEPATH + "Res" + new Date().toString() + ".csv");
+			Plotter.plot(IMAGEPATH + "latencyVsBitLength.jpeg", "BitLength Vs Latency", "Avg. Latency(ms)",
+					"RSA Bit Length");
 		}		
-		Plotter.plot(IMAGEPATH + "latencyVsBitLength.jpeg", "BitLength Vs Latency", "Avg. Latency(ms)",
-				"RSA Bit Length");
+		
 	}
 
 	private static void processArgs(String[] args) {
@@ -133,7 +135,9 @@ class SSLWorker implements Runnable {
 	public void run() {
 		// System.out.println("T"+tid+": Starting offload now...");
 		int[][] mesg = new CudaKernels().decrypt(BenchmarkSSL.BITLENGTH, n, pd, qd, e, p, q, emsg, dmsg, qinv, rpinv,
-				rqinv, mp, mq, r2p, r2q, BenchmarkSSL.BATCH_SIZE);
+				rqinv, mp, mq, r2p, r2q, BenchmarkSSL.BATCH_SIZE, BenchmarkSSL.BASE);
+		print_arr(emsg[0], "Msg");
+		print_arr(dmsg[0], "M1M2");
 		// System.out.println("Decrypted message:"+new String(mesg));
 		// System.out.println("T"+tid+": Done.");
 	}
@@ -222,9 +226,17 @@ class SSLWorker implements Runnable {
 					kby2);
 
 		}
-
+		
 	}
 
+	public static void print_arr(int[] a, String label){
+		System.out.print(label);
+		System.out.print(": ");
+		for(int i=0;i<a.length;i++){
+			System.out.print(a[i]+" ");
+		}
+		System.out.println();
+	}
 	public static String pad(String str, int bl) {
 		String paddedStr = str;
 		for (int i = 0; i < bl - str.length(); i++) {

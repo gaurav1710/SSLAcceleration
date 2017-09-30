@@ -1,3 +1,7 @@
 *.jar
 *.class
 *.o
+.classpath
+.metadata
+.project
+*.log

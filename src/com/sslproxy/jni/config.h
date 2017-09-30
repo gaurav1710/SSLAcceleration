@@ -63,8 +63,9 @@ typedef long long_radix_type;
 
 struct request_batch_struct {
 	radix_type *x, *y, *m, *res, *rinv, *mbar, *r2modm, *m1m2, *q, *qinv;
-	int request_id;
+	int bit_len;
 	int batch_size;
+	int base;
 };
 
 typedef struct request_batch_struct request_batch;

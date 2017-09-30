@@ -10,10 +10,10 @@ extern "C" {
 /*
  * Class:     com_sslproxy_jni_CudaKernels
  * Method:    decrypt
- * Signature: (I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[II)[[I
+ * Signature: (I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[I[[III)[[I
  */
 JNIEXPORT jobjectArray JNICALL Java_com_sslproxy_jni_CudaKernels_decrypt
-  (JNIEnv *, jobject, jint, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jint);
+  (JNIEnv *, jobject, jint, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jobjectArray, jint, jint);
 
 #ifdef __cplusplus
 }
