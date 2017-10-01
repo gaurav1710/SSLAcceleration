@@ -21,14 +21,11 @@ void convert(jchar* a, char b[], int len){
 }
 
 
-JNIEXPORT jobjectArray JNICALL Java_com_sslproxy_jni_CudaKernels_decrypt
+JNIEXPORT void JNICALL Java_com_sslproxy_jni_CudaKernels_decrypt
   (JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jobjectArray pd, jobjectArray qd,
 		  jobjectArray e, jobjectArray p, jobjectArray q, jobjectArray emsg, jobjectArray dmsg,
 		  jobjectArray qinv, jobjectArray rpinv, jobjectArray rqinv, jobjectArray mbarp, jobjectArray mbarq,
 		  jobjectArray r2p, jobjectArray r2q,jint num_req, jint jbase)
 {
-
 	decrypt_batch(env, jobj, jk, n, pd, qd, e, p, q, emsg, dmsg, qinv, rpinv, rqinv, mbarp, mbarq, r2p, r2q, num_req, jbase);
-
-	return dmsg;
 }

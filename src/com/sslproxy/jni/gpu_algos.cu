@@ -5,12 +5,12 @@
 #include "gpu_algos.h"
 
 
-__device__ void acc(radix_type *a, radix_type *b, int k) {
+__device__ void acc(radix_type *a, radix_type *b, int k, int base, int basem1) {
 	radix_type carry = 0;
 	for (int i = 0; i < k; i++) {
 		radix_type sum = a[i] + b[i] + carry;
-		a[i] = sum & BASEMINUS1;
-		carry = sum >> BASE;
+		a[i] = sum & basem1;
+		carry = sum >> base;
 	}
 }
 
@@ -27,7 +27,7 @@ __device__ void dprint_array(radix_type a[], int l) {
  * Calculates m*n
  */
 __global__ void pmul(radix_type *mg, radix_type *n, int k, radix_type *res,
-		int stridem, int striden, int num_threads) {
+		int stridem, int striden, int num_threads, int base, int basem1) {
 	extern __shared__ radix_type shared_mem[]; //size:(2*k+2*k+k)*(num of req per block)
 	int bx = blockIdx.x;
 	int tx = threadIdx.x;
@@ -50,31 +50,29 @@ __global__ void pmul(radix_type *mg, radix_type *n, int k, radix_type *res,
 		inter_buf[x + k] = 0;
 		//digit of one operand that will be taken care of by this thread..
 		long_radix_type ndig = 1;
-		if (ENABLEGLOBALLDST) {
-			ndig = n[bx * striden * reqs + striden * reqno + x];
-		}
+		
 		long_radix_type product = 1;
 		//int mi = reqno*k;
 		for (i = 0; i < k; i++) {
 			product = m[i] * ndig;
 			//low word
-			radix_type lword = product & BASEMINUS1;
+			radix_type lword = product & basem1;
 			//high word
-			radix_type hword = product >> BASE;
+			radix_type hword = product >> base;
 			//store and add to partial results with carry handling
 			int ind = x + i;
 			//lword
 			radix_type cil = inter_buf[ind] + lword;
-			radix_type carry = (cil) >> BASE;
-			inter_buf[ind] = (cil) & BASEMINUS1;
+			radix_type carry = (cil) >> base;
+			inter_buf[ind] = (cil) & basem1;
 
 			__syncthreads();
 			//hword
 			if (ind + 1 < 2 * k) {
 				carry_buf[(ind + 1)] += carry;
 				radix_type hcil = inter_buf[ind + 1] + hword;
-				carry = ((hcil) >> BASE);
-				inter_buf[ind + 1] = (hcil) & BASEMINUS1;
+				carry = ((hcil) >> base);
+				inter_buf[ind + 1] = (hcil) & basem1;
 			}
 			if (ind + 2 < 2 * k) {
 				carry_buf[(ind + 2)] += carry;
@@ -82,7 +80,7 @@ __global__ void pmul(radix_type *mg, radix_type *n, int k, radix_type *res,
 
 		}
 		if (x == 0) {
-			acc(&inter_buf[0], &carry_buf[0], 2 * k);
+			acc(&inter_buf[0], &carry_buf[0], 2 * k, base, basem1);
 		}
 
 		//	res[2*k*bx+2*x] = inter_buf[2*x];
@@ -97,7 +95,7 @@ __global__ void pmul(radix_type *mg, radix_type *n, int k, radix_type *res,
 }
 
 __global__ void padd(radix_type *a, radix_type *b, int k, int num_req,
-		int stridea, int strideb, radix_type *residue_carry, int num_threads) {
+		int stridea, int strideb, radix_type *residue_carry, int num_threads, int base, int basem1) {
 	extern __shared__ radix_type shared_mem[];	//size:k+k+1
 
 	int tx = threadIdx.x;
@@ -122,8 +120,8 @@ __global__ void padd(radix_type *a, radix_type *b, int k, int num_req,
 	}
 
 	for (int i = 0; i < k; i++) {
-		res[x] = sum & BASEMINUS1;
-		carry_buf[x + 1] = carry_buf[x + 1] + (sum >> BASE);
+		res[x] = sum & basem1;
+		carry_buf[x + 1] = carry_buf[x + 1] + (sum >> base);
 		sum = res[x] + carry_buf[x];
 		carry_buf[x] = 0;
 	}
@@ -147,7 +145,7 @@ __device__ int d_compare(radix_type *a, radix_type *b, int size) {
 
 __global__ void psub(radix_type *a, radix_type *b, int k, radix_type *resg,
 		radix_type *add_carry, int stridea, int strideb, int compare,
-		int num_threads) {
+		int num_threads, int base, int basem1) {
 	extern __shared__ radix_type shared_mem[];	//size:k+k
 
 	int bx = blockIdx.x;
@@ -172,7 +170,7 @@ __global__ void psub(radix_type *a, radix_type *b, int k, radix_type *resg,
 
 		for (int i = 0; i < k; i++) {
 			carry = dig < 0;
-			res[x] = ((carry) * (BASEMINUS1 + 1) + dig);
+			res[x] = ((carry) * (basem1 + 1) + dig);
 			if ((x + 1) != k)
 				carry_buf[x + 1] = carry;
 			dig = res[x] - carry_buf[x];
@@ -220,7 +218,7 @@ __global__ void pcopy_wcondition(radix_type *a, radix_type *b,
 }
 
 __global__ void convert_to_base(radix_type *x, short_radix_type *y, int k,
-		int base, int num_req, int num_threads_per_block) {
+		int base, int num_req, int num_threads_per_block, int BASE) {
 	int tid = blockIdx.x * num_threads_per_block + threadIdx.x;
 	int ind = 0;
 	if (tid < num_req) {
@@ -236,7 +234,7 @@ __global__ void convert_to_base(radix_type *x, short_radix_type *y, int k,
 	}
 }
 __global__ void extract_bits(short_radix_type *base2y,
-		short_radix_type *base2_bits, int ind, int k) {
+		short_radix_type *base2_bits, int ind, int k, int base) {
 	int x = threadIdx.x;
-	base2_bits[x] = base2y[x * BASE * k + ind];
+	base2_bits[x] = base2y[x * base * k + ind];
 }
