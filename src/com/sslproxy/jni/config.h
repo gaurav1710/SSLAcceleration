@@ -1,5 +1,5 @@
 //Debug logs
-#define DEBUG 0
+#define DEBUG 1
 #define CUDAMEMDEVICE cudaMalloc
 #define CUDAMEMHOST cudaMallocHost
 #define ENABLEGLOBALLDST 1

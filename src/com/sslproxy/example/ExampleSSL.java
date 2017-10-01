@@ -11,7 +11,7 @@ import com.sslproxy.jni.CudaKernels;
  * @author gaurav(mcs132556)
  */
 public class ExampleSSL {
-	public static int BITLENGTH = 256; //1024 RSA encryption
+	public static int BITLENGTH = 32; //1024 RSA encryption
 	public static int BASE = 16; //Base 2^16 representation  
 	public static int BATCH_SIZE = 1;
 
@@ -54,9 +54,20 @@ class SSLWorker implements Runnable {
 	public void run() {
 		new CudaKernels().decrypt(ExampleSSL.BITLENGTH, n, pd, qd, e, p, q, emsg, dmsg, qinv, rpinv,
 				rqinv, mp, mq, r2p, r2q, ExampleSSL.BATCH_SIZE, ExampleSSL.BASE);
-		print_arr(dmsg[0], "RES");
+		validate();
 	}
-
+	
+	public static void validate(){
+		int base = (int)Math.pow(2, ExampleSSL.BASE);
+		for(int i=0;i<ExampleSSL.BATCH_SIZE;i++){
+			print_arr(dmsg[i], "DMSG");
+			BigInteger gpuRes = toBI(dmsg[i], base);
+			BigInteger cpuRes = decrypt(emsg[i], bd[i], bn[i], base);
+			System.out.println("GPU="+gpuRes.toString());
+			System.out.println("CPU="+cpuRes.toString());
+		}
+	} 
+	
 	public static void initVal() {
 		int k = ExampleSSL.BITLENGTH / ExampleSSL.BASE;//length of array containing the number represented in BASE
 		int kby2 = k / 2;
@@ -168,5 +179,22 @@ class SSLWorker implements Runnable {
 							.reverse().toString(), 2);
 		}
 		return baseDigs;
+	}
+	
+	public static BigInteger toBI(int a[], int base){
+		BigInteger bi = new BigInteger("0");
+		BigInteger pow = new BigInteger("1");
+		BigInteger bbase = new BigInteger(""+base);
+		for(int i=0;i<a.length;i++){
+			bi = bi.add(new BigInteger(""+a[i]).multiply(pow));
+			pow = pow.multiply(bbase);
+			
+		}
+		return bi;
+	}
+	public static BigInteger decrypt(int c[], BigInteger D, BigInteger N, int base){
+		BigInteger C = toBI(c, base);
+		BigInteger M = C.modPow(D, N);
+		return M;
 	}
 }

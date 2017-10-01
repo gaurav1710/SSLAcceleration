@@ -19,9 +19,6 @@ int THREADSPERBLOCK[] = { 512, 512, 512, 512, 512, 512, 512 };
 
 cudaStream_t *streams[1];
 
-inline void print_array(radix_type *a, int n){
-}
-
 inline void setup_streams() {
 
 	streams[0] = new cudaStream_t[1];
@@ -72,6 +69,20 @@ void copy_data_to_host_ds(radix_type *ha, radix_type *da, int words,
 			*streams[streamid]);
 }
 
+void print_arr(radix_type *a, int n, char label[], int gcopy){
+	if(gcopy){
+		radix_type *ha = (radix_type *)malloc(n*sizeof(radix_type));
+		copy_data_to_host(ha,a,n,0);
+		cudaError_t err = cudaStreamSynchronize(*streams[0]);
+		a=ha;
+	}
+	fprintf( stdout, label);
+	fprintf( stdout, ": ");
+	for(int i=0;i<n;i++){
+		fprintf( stdout, "%d ", a[i]);
+	}
+	fprintf( stdout, "\n");
+}
 radix_type *allocate(int size) {
 	radix_type *mem_pointer = NULL;
 	CUDAMEMHOST((void **) &mem_pointer, size * sizeof(radix_type));
@@ -266,8 +277,7 @@ inline void montgomery(radix_type *a, radix_type *b, int k, radix_type *m,
 	parallel_mult(a, b, k, T, k, k, num_req, tid, base, basem1);
 
 	if (DEBUG) {
-		printf("montgomery-MulT:");
-		print_array(T, 2 * k);
+		print_arr(T, 2 * k,"montgomery-MulT", 1);
 	}
 
 	copy_zeros_to_device(M, 2 * k * num_req, tid);
@@ -275,37 +285,32 @@ inline void montgomery(radix_type *a, radix_type *b, int k, radix_type *m,
 	//M=T*m'
 	parallel_mult(T, mbar, k, M, 2 * k, k, num_req, tid, base, basem1);
 	if (DEBUG) {
-		printf("montgomery-MulM:");
-		print_array(M, 2 * k);
+		print_arr(M, 2 * k,"montgomery-MulM", 1);
 	}
 	copy_zeros_to_device(U, 2 * k * num_req, tid);
 	//U=M*m
 	parallel_mult(M, m, k, U, 2 * k, k, num_req, tid, base, basem1);
 	if (DEBUG) {
-		printf("montgomery-MulU:");
-		print_array(U, 2 * k);
+		print_arr(U, 2 * k,"montgomery-MulU",1);
 	}
 	copy_zeros_to_device(addition_carry, num_req, tid);
 
 	//U=T+M*m
 	parallel_add(U, T, 2 * k, num_req, 2 * k, 2 * k, addition_carry, tid , base, basem1);
 	if (DEBUG) {
-		printf("montgomery-AddU2:");
-		print_array(U, 2 * k);
+		print_arr(U, 2 * k,"montgomery-AddU2",1);
 	}
 	copy_zeros_to_device(carry, 2 * k * num_req, tid);
 
 	parallel_rshift(U, 2 * k, k, num_req, carry, tid);	//carry is result here..
 	if (DEBUG) {
-		printf("montgomery-RShiftU:");
-		print_array(carry, 2 * k);
+		print_arr(carry, 2 * k,"montgomery-RShiftU",1);
 	}
 	parallel_copy(res, carry, k, 2 * k, k, num_req, tid);
 
 	parallel_sub(carry, m, k, res, addition_carry, num_req, 2 * k, k, 1, tid, base, basem1);
 	if (DEBUG) {
-		printf("montgomery-SubRes:");
-		print_array(res, k);
+		print_arr(res, k,"montgomery-SubRes",1);
 	}
 	deallocate(T);
 	deallocate(M);
@@ -341,8 +346,7 @@ inline void hmod_exp_sqmul(radix_type *x, radix_type *y, int k, radix_type *m,
 	montgomery(temp, r2modm, k, m, rinv, mbar, res, num_req, tid,base,basem1);
 
 	if (DEBUG) {
-		printf("R2*1 mod m:");
-		print_array(res, k);
+		print_arr(res, k,"R2*1 mod m",1);
 	}
 	parallel_copy(temp, res, k, k, k, num_req, tid);
 
@@ -350,8 +354,7 @@ inline void hmod_exp_sqmul(radix_type *x, radix_type *y, int k, radix_type *m,
 	montgomery(x, r2modm, k, m, rinv, mbar, res, num_req, tid,base,basem1);
 
 	if (DEBUG) {
-		printf("R2*x mod m:");
-		print_array(res, k);
+		print_arr(res, k,"R2*x mod m", 1);
 	}
 	parallel_copy(x, res, k, k, k, num_req, tid);
 
@@ -433,16 +436,11 @@ void calmerge_m1_m2(radix_type *c, radix_type *e, radix_type *m, int k,
 
 	copy_zeros_to_device(t1, k * num_req, tid);
 	copy_zeros_to_device(addition_carry, num_req, tid);
-	if (DEBUG) {
-		printf("M1=%lu\n", convert_2base10(M, k, basem1));
-		printf("M2=%lu\n", convert_2base10(&M[num_req * k], k, basem1));
-	}
+	
 	//M1-M2
 	parallel_sub(M, &M[num_req * k], k, t1, addition_carry, num_req, k, k, 0,
 			tid,base,basem1);
-	if (DEBUG) {
-		printf("M1-M2=%lu\n", convert_2base10(t1, k,basem1));
-	}
+	
 	copy_zeros_to_device(t2, 2 * k * num_req, tid);
 	copy_zeros_to_device(t3, 2 * k * num_req, tid);
 	copy_zeros_to_device(mont, k * num_req, tid);
@@ -450,26 +448,20 @@ void calmerge_m1_m2(radix_type *c, radix_type *e, radix_type *m, int k,
 	//(M1-M2)*(qinv mod p) mod p
 	montgomery_with_conv(t1, qinv, m, rinv, mbar, r2modm, mont, k, num_req,
 			tid,base,basem1);
-	if (DEBUG) {
-		printf("(M1-M2)*q^inv mod p=%lu\n", convert_2base10(mont, k, basem1));
-	}
+	
 	copy_zeros_to_device(t2, 2 * k * num_req, tid);
 	copy_zeros_to_device(t3, 2 * k * num_req, tid);
 
 	//(M1-M2)*(qinv mod p)*q
 	parallel_mult(mont, q, k, t2, k, k, num_req, tid,base,basem1);
-	if (DEBUG) {
-		printf("((M1-M2)*q^inv mod p)*q=%lu\n", convert_2base10(t2, 2 * k, basem1));
-	}
+	
 	parallel_copy(res, t2, 2 * k, 2 * k, 2 * k, num_req, tid);
 
 	copy_zeros_to_device(addition_carry, num_req, tid);
 	//M2 + (M1-M2)*(qinv mod p)*q
 	parallel_add(res, &M[num_req * k], k, num_req, 2 * k, k, addition_carry,
 			tid,base,basem1);
-	if (DEBUG) {
-		printf("M2+((M1-M2)*q^inv mod p)*q=%lu\n", convert_2base10(res, 2 * k, basem1));
-	}
+	
 	deallocate(t1);
 	deallocate(t2);
 	deallocate(t3);
@@ -519,22 +511,6 @@ void *execute(request_batch *reqs) {
 
 	copy_data_to_host(reqs->m1m2, dm1m2, 2 * k * num_req,0);
 	cudaError_t err = cudaStreamSynchronize(*streams[0]);
-	for (int i = 0; i < num_req; i++) {
-		if (k == 2) {
-			if ((reqs->m1m2[3 + i * k * 2] == 12001)
-					&& (reqs->m1m2[2 + i * k * 2] == 33560)
-					&& (reqs->m1m2[1 + i * k * 2] == 27692)
-					&& (reqs->m1m2[0 + i * k * 2] == 64771))
-				printf("GPU %d PASS\n", i);
-			else
-				printf("GPU %d FAIL\n", i);
-			//Ans:12001 33560 27692 64771
-			assert(reqs->m1m2[3 + i * k * 2] == 12001);
-			assert(reqs->m1m2[2 + i * k * 2] == 33560);
-			assert(reqs->m1m2[1 + i * k * 2] == 27692);
-			assert(reqs->m1m2[0 + i * k * 2] == 64771);
-		}
-	}
 	
 	deallocate(dx);
 	deallocate(dy);
@@ -577,16 +553,6 @@ void convert_arr(JNIEnv *env, jobjectArray a, radix_type *b, int num_req, int le
 	}
 }
 
-void print_arr(radix_type *a, int n, char label[]){
-	fprintf( stdout, label);
-	fprintf( stdout, ": ");
-	for(int i=0;i<n;i++){
-		fprintf( stdout, "%d ", a[i]);
-	}
-	fprintf( stdout, "\n");
-}
-
-
 extern void decrypt_batch(JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jobjectArray pd, jobjectArray qd, jobjectArray e, jobjectArray p, jobjectArray q
 		, jobjectArray emsg, jobjectArray dmsg, jobjectArray qinv, jobjectArray rpinv, jobjectArray rqinv, jobjectArray mbarp, jobjectArray mbarq,
 		jobjectArray r2p, jobjectArray r2q,jint jnum_req, jint jbase){
@@ -597,7 +563,9 @@ extern void decrypt_batch(JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jo
 	int k = (int)jk; // k here is bitlength in binary representation (BASE:2)
 	k = k/base; //length of array containing the number represented in BASE
 	k/=2;
-
+	if(DEBUG){
+		fprintf(stdout, "bitlength=%d, base=2^ %d k=%d\n",(int)jk, base, k);
+	}
 	demsg = (radix_type *)malloc(2*num_req*k*sizeof(radix_type));
 	dpqd = (radix_type *)malloc(2*num_req*k*sizeof(radix_type));
 	dpq = (radix_type *)malloc(2*num_req*k*sizeof(radix_type));/*combined p&q store toprevent divergence*/
@@ -626,7 +594,6 @@ extern void decrypt_batch(JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jo
 	//R^2 mod m
 	convert_arr(env, r2p, dr2pq, num_req, k);
 	convert_arr(env, r2q, &dr2pq[num_req*k], num_req, k);
-print_arr(demsg,num_req*2*k ,"Msg");
 	memset(dm,0,2*num_req*k*sizeof(radix_type));
 	setup();
 	request_batch *req = (request_batch *) malloc(sizeof(request_batch));
@@ -675,7 +642,7 @@ for (int i = 0; i < num_req; i++) {
 	}
 	execute(req);
 	if(DEBUG){
-		print_arr(req->m1m2,num_req*2*k ,"Res");
+		print_arr(req->m1m2,num_req*2*k ,"Res", 0);
 	}
 	for(int i=0;i<num_req;i++){
 		jint *message = (jint *)calloc(sizeof(jint), 2*k);
