@@ -11,13 +11,13 @@ import com.sslproxy.jni.CudaKernels;
  * @author gaurav(mcs132556)
  */
 public class ExampleSSL {
-	public static int BITLENGTH = 32; //1024 RSA encryption
-	public static int BASE = 16; //Base 2^16 representation  
-	public static int BATCH_SIZE = 1;
+	public static int BITLENGTH = 32; //=k-bit RSA encryption
+	public static int BASE = 16; //Base 2^BASE representation  
+	public static int BATCH_SIZE = 1;//Number of decryption requests
 
 	public static void main(String[] args) {
 		System.out.println("Setup Details:");
-		System.out.println("BITLENGTH_START=" + BITLENGTH);
+		System.out.println("BITLENGTH=" + BITLENGTH);
 		System.out.println("BASE=2^" + BASE);
 		SSLWorker.initVal();
 		new SSLWorker(0).run(); //synchronous, no threading for now..
@@ -61,10 +61,6 @@ class SSLWorker implements Runnable {
 		int base = (int)Math.pow(2, ExampleSSL.BASE);
 		for(int i=0;i<ExampleSSL.BATCH_SIZE;i++){
 			print_arr(dmsg[i], "DMSG");
-			BigInteger gpuRes = toBI(dmsg[i], base);
-			BigInteger cpuRes = decrypt(emsg[i], bd[i], bn[i], base);
-			System.out.println("GPU="+gpuRes.toString());
-			System.out.println("CPU="+cpuRes.toString());
 		}
 	} 
 	
@@ -150,7 +146,10 @@ class SSLWorker implements Runnable {
 			r2q[kk] = conv(
 					pad(new StringBuilder(R2.mod(bq).toString(2)).reverse().toString(), kby2 * ExampleSSL.BASE),
 					kby2);
-
+			print_arr(p[kk], "P");
+			print_arr(q[kk], "Q");
+			print_arr(e[kk], "E");
+			print_arr(bd, "D");
 		}
 		
 	}
@@ -160,6 +159,14 @@ class SSLWorker implements Runnable {
 		System.out.print(": ");
 		for(int i=0;i<a.length;i++){
 			System.out.print(a[i]+" ");
+		}
+		System.out.println();
+	}
+	public static void print_arr(BigInteger[] a, String label){
+		System.out.print(label);
+		System.out.print(": ");
+		for(int i=0;i<a.length;i++){
+			System.out.print(a[i].toString()+" ");
 		}
 		System.out.println();
 	}

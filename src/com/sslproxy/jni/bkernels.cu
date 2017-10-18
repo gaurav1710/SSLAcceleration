@@ -117,27 +117,24 @@ inline void extract_req_bits(short_radix_type *base2y,
 inline void parallel_mult(radix_type *m, radix_type *n, int k, radix_type *res,
 		int stridem, int striden, int num_req, int streamid, int base, int basem1) {
 	//THREADSPERBLOCK[0]
-	int streams_req =  1;
 	int num_blocks = (num_req * k) / THREADSPERBLOCK[0]
 			+ ((num_req * k) % THREADSPERBLOCK[0] != 0);
 	int num_threads = THREADSPERBLOCK[0];
 	if ((num_req * k) < THREADSPERBLOCK[0])
 		num_threads = num_req * k;
 	int num_req_per_block = num_threads / k;
-
-	for (int i = 0; i < streams_req; i++) {
+	if(DEBUG){
+		fprintf(stdout, "num_blocks=%d, num_threads=%d\n, num_req=%d\n",num_blocks, num_threads,num_req);
+	}
 		pmul<<<num_blocks, num_threads,
 				5 * k * num_req_per_block * sizeof(radix_type),
 				*streams[streamid]>>>(m, n, k, res, stridem, striden,
 				num_threads, base, basem1);
-	}
 
-	for (int i = 0; i < streams_req; i++) {
-		cudaError_t err = cudaStreamSynchronize(streams[streamid][i]);
+		cudaError_t err = cudaStreamSynchronize(*streams[streamid]);
 		if (err != cudaSuccess)
 			printf("Error Encountered in Parallel_Mult---%s\n",
 					cudaGetErrorString(err));
-	}
 }
 inline void parallel_add(radix_type *a, radix_type *b, int k, int num_req,
 		int stridea, int strideb, radix_type *residue_carry, int streamid, int base, int basem1) {
@@ -277,7 +274,9 @@ inline void montgomery(radix_type *a, radix_type *b, int k, radix_type *m,
 	parallel_mult(a, b, k, T, k, k, num_req, tid, base, basem1);
 
 	if (DEBUG) {
-		print_arr(T, 2 * k,"montgomery-MulT", 1);
+		print_arr(a, k,"montgomery-MulAT", 1);
+		print_arr(b, k,"montgomery-MulBT", 1);
+		print_arr(T, 2 * k*num_req,"montgomery-MulT", 1);
 	}
 
 	copy_zeros_to_device(M, 2 * k * num_req, tid);
@@ -342,12 +341,14 @@ inline void hmod_exp_sqmul(radix_type *x, radix_type *y, int k, radix_type *m,
 	copy_zeros_to_device(res, k * num_req, tid);
 
 	parallel_base_convert(y, base2y, k, 2, num_req, tid, base);
-
+	if (DEBUG) {
+		print_arr(base2y, k*num_req*base,"Base2Y",1);
+	}
 	montgomery(temp, r2modm, k, m, rinv, mbar, res, num_req, tid,base,basem1);
-
 	if (DEBUG) {
 		print_arr(res, k,"R2*1 mod m",1);
 	}
+	
 	parallel_copy(temp, res, k, k, k, num_req, tid);
 
 	copy_zeros_to_device(res, k * num_req, tid);
@@ -490,7 +491,18 @@ void *execute(request_batch *reqs) {
 	dqinv = allocate(k*num_req);
 
 	memset(reqs->res, 0, 2 * num_req * k * sizeof(radix_type));
-
+	if(DEBUG){
+	    print_arr(reqs->x,num_req*2*k ,"X", 0);
+		print_arr(reqs->y,num_req*2*k ,"Y", 0);
+		print_arr(reqs->m,num_req*2*k ,"M", 0);
+		print_arr(reqs->mbar,num_req*2*k ,"M'", 0);
+		print_arr(reqs->rinv,num_req*2*k ,"R-1", 0);
+		print_arr(reqs->q,num_req*k ,"Q", 0);
+		print_arr(reqs->qinv,num_req*k ,"Qinv", 0);
+		print_arr(reqs->r2modm, 2*num_req*k ,"R2modm", 0);
+			
+	}
+	
 	copy_data_to_device(reqs->x, dx, 2 * k * num_req,0);
 	copy_data_to_device(reqs->y, dy, 2 * k * num_req,0);
 	copy_data_to_device(reqs->m, dm, 2 * k * num_req,0);
@@ -564,7 +576,7 @@ extern void decrypt_batch(JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jo
 	k = k/base; //length of array containing the number represented in BASE
 	k/=2;
 	if(DEBUG){
-		fprintf(stdout, "bitlength=%d, base=2^ %d k=%d\n",(int)jk, base, k);
+		fprintf(stdout, "bitlength=%d, base=2^ %d k=%d num_req=%d\n",(int)jk, base, k, num_req);
 	}
 	demsg = (radix_type *)malloc(2*num_req*k*sizeof(radix_type));
 	dpqd = (radix_type *)malloc(2*num_req*k*sizeof(radix_type));
@@ -613,6 +625,7 @@ extern void decrypt_batch(JNIEnv *env, jobject jobj, jint jk, jobjectArray n, jo
 	req->basem1 = (int)pow(2,base)-1;
 	if(DEBUG){
 		fprintf(stdout, "POW=%d", req->basem1);
+		
 	}
 for (int i = 0; i < num_req; i++) {
 		

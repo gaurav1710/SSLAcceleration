@@ -50,7 +50,9 @@ __global__ void pmul(radix_type *mg, radix_type *n, int k, radix_type *res,
 		inter_buf[x + k] = 0;
 		//digit of one operand that will be taken care of by this thread..
 		long_radix_type ndig = 1;
-		
+		if (ENABLEGLOBALLDST) {
+    		ndig = n[bx * striden * reqs + striden * reqno + x];
+    	}
 		long_radix_type product = 1;
 		//int mi = reqno*k;
 		for (i = 0; i < k; i++) {
